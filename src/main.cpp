@@ -6,6 +6,7 @@
 #include <EEPROM.h>
 #include <WiFiUdp.h>
 #include <NTPClient.h>
+#include <ArduinoJson.h>
 #include "RulesManagementService.h"
 
 WiFiClient espClient;
@@ -18,9 +19,9 @@ RulesManagementService ruleService;
 
 const char* ssid     = "net_4016";         // The SSID (name) of the Wi-Fi network you want to connect to
 const char* password = "LCZTAUGQVCLCZTAUGQVC";     // The password of the Wi-Fi network
-const char* mqttServer = "test.mosquitto.org";
+const char* mqttServer = "192.168.1.7";
 const char* topicName = "sensors/heatingControl/1";
-const char* tempTopicName = "sensors/heatingControl/temp";
+const char* systemStatusTopic = "sensors/heatingControl/1/status";
 
 std::vector<Rule> rules;
 long lastActiveRuleUpdate = 0;
@@ -42,6 +43,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   Serial.println("Loading rules from memory");
   rules = ruleService.getSavedRules();
+
+  lastActiveRuleUpdate = 0;
 }
 
 void setupWifi(){
@@ -57,7 +60,6 @@ void setupWifi(){
 void setupMqtt(){
   client.setServer(mqttServer, 1883);
   client.setCallback(callback);
-  client.subscribe(tempTopicName);
   client.subscribe(topicName);
 }
 
@@ -70,15 +72,23 @@ void reconnect() {
     // Attempt to connect
     if (client.connect(clientId.c_str())) {
       // Once connected, publish an announcement...
-      client.publish(topicName, "hello from esp8266");
+      client.publish(topicName, "esp8266 connected");
       // ... and resubscribe
       client.subscribe(topicName);
-      client.subscribe(tempTopicName);
     } else {
       // Wait 5 seconds before retrying
       delay(5000);
     }
   }
+}
+
+void sendSystemStatus(float temperature){
+    const size_t capacity = JSON_OBJECT_SIZE(1) + 20;
+    char* systemStatusJson = new char[capacity];
+    DynamicJsonDocument doc(capacity);
+    doc["temperature"] = temperature;
+    serializeJson(doc, systemStatusJson, capacity);
+    client.publish(systemStatusTopic, systemStatusJson);
 }
 
 void inspectRules(){
@@ -93,6 +103,8 @@ void inspectRules(){
 
   sensors.requestTemperatures();
   float currentTemperature = sensors.getTempCByIndex(0);
+
+  sendSystemStatus(currentTemperature);
 
   Serial.print("Current temp = ");
   Serial.println(currentTemperature);
@@ -114,7 +126,7 @@ void inspectRules(){
   }
 
   if(isRuleMatched){
-    if(currentTemperature < activeRule.getMaxTemperature()){
+    if(currentTemperature < activeRule.getMaxTemperature() || activeRule.isDirect()){
       Serial.println("Matched Rule");
       activeRule.printInfoToSerial();
       digitalWrite(RELAY, HIGH);

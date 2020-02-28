@@ -27,10 +27,36 @@ double Rule::getMaxTemperature(){
 }
 
 bool Rule::isActive(NTPClient ntpClient, float currentTemperature){
+  bool isDayActive = false;
+
+  if(m_day == 0){
+    // day = 0 is a special setpoint which means that direct control was used
+    // and heater should be turned ON without checking temperature status
+    return true;
+  }
+
+  if(m_day == 8 && ntpClient.getDay() >= 1 && ntpClient.getDay() <= 5){
+    // 8 represent work week group
+    isDayActive = true;
+  }
+
+  if(m_day == 9 && ntpClient.getDay() >= 6 && ntpClient.getDay() <= 7){
+    // 9 represent weekend group
+    isDayActive = true;
+  }
+
+  if(m_day == ntpClient.getDay()){
+    isDayActive = true;
+  }
+
   return
-    (m_day == ntpClient.getDay() &&
+    (isDayActive &&
      ntpClient.getHours() >= m_startHour &&
      ntpClient.getMinutes() >= m_startMinute);
+}
+
+bool Rule::isDirect(){
+  return m_day == 0;
 }
 
 void Rule::printInfoToSerial(){

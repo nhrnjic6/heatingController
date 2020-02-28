@@ -15,5 +15,6 @@ class Rule {
     int getStartMinute();
     double getMaxTemperature();
     bool isActive(NTPClient ntpClient, float currentTemperature);
+    bool isDirect();
     void printInfoToSerial();
 };
