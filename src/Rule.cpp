@@ -26,33 +26,27 @@ double Rule::getMaxTemperature(){
   return m_maxTemperature;
 }
 
-bool Rule::isActive(NTPClient ntpClient, float currentTemperature){
-  bool isDayActive = false;
+bool Rule::isBefore(NTPClient ntpClient){
+  bool isActiveDay = false;
 
-  if(m_day == 0){
-    // day = 0 is a special setpoint which means that direct control was used
-    // and heater should be turned ON without checking temperature status
-    return true;
+  // IS DIRECT OR CURRENT DAY
+  if(m_day == 0 || m_day == ntpClient.getDay()){
+    isActiveDay = true;
   }
 
-  if(m_day == 8 && ntpClient.getDay() >= 1 && ntpClient.getDay() <= 5){
-    // 8 represent work week group
-    isDayActive = true;
+  // IS WORK WEEK GROUP
+  if(m_day == 8 && (ntpClient.getDay() == 6 || ntpClient.getDay() == 7)){
+    isActiveDay = true;
   }
 
-  if(m_day == 9 && ntpClient.getDay() >= 6 && ntpClient.getDay() <= 7){
-    // 9 represent weekend group
-    isDayActive = true;
+  // IS WEEKEND GROUP
+  if(m_day == 9 && (ntpClient.getDay() >= 1 && ntpClient.getDay() <= 5)){
+    isActiveDay = true;
   }
 
-  if(m_day == ntpClient.getDay()){
-    isDayActive = true;
-  }
-
-  return
-    (isDayActive &&
-     ntpClient.getHours() >= m_startHour &&
-     ntpClient.getMinutes() >= m_startMinute);
+  return isActiveDay
+    && m_startHour <= ntpClient.getHours()
+    && m_startMinute < ntpClient.getMinutes();
 }
 
 bool Rule::isDirect(){

@@ -118,10 +118,15 @@ void inspectRules(){
   Serial.print("Minute = ");
   Serial.println(timeClient.getMinutes());
 
-  for(unsigned int i = 0; i < rules.size(); i++){
-    if(rules[i].isActive(timeClient, currentTemperature)){
+  for(int i = (rules.size() - 1); i >= 0; i--){
+    Serial.println("------------Rule Validation---------------");
+    rules[i].printInfoToSerial();
+    Serial.println("------------Rule Validation---------------");
+
+    if(rules[i].isBefore(timeClient) || rules[i].isDirect()){
       activeRule = rules[i];
       isRuleMatched = true;
+      break;
     }
   }
 
@@ -131,9 +136,11 @@ void inspectRules(){
       activeRule.printInfoToSerial();
       digitalWrite(RELAY, HIGH);
     }else{
+      Serial.println("Relay LOW - INNER ELSE");
       digitalWrite(RELAY, LOW);
     }
   }else{
+    Serial.println("Relay LOW - OUTER ELSE");
     digitalWrite(RELAY, LOW);
   }
 
@@ -142,6 +149,7 @@ void inspectRules(){
 
 void setup() {
   Serial.begin(9600);
+  delay(10);
 
   pinMode(RELAY, OUTPUT);
   digitalWrite(RELAY, LOW);
@@ -155,7 +163,10 @@ void setup() {
   Serial.println("Loading rules from memory");
   rules = ruleService.getSavedRules();
 
-  for(unsigned int i = 0; i < rules.size(); i++){
+  Serial.print("Rules size = ");
+  Serial.println(rules.size());
+
+  for(int i = (rules.size() - 1); i >= 0; i--){
     rules[i].printInfoToSerial();
   }
 }

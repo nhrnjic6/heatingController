@@ -14,7 +14,7 @@ class Rule {
     int getStartHour();
     int getStartMinute();
     double getMaxTemperature();
-    bool isActive(NTPClient ntpClient, float currentTemperature);
+    bool isBefore(NTPClient ntpClient);
     bool isDirect();
     void printInfoToSerial();
 };
