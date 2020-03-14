@@ -14,17 +14,18 @@ PubSubClient client(espClient);
 OneWire oneWire(14);
 DallasTemperature sensors(&oneWire);
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "europe.pool.ntp.org", 3600, 3600);
+NTPClient timeClient(ntpUDP, "europe.pool.ntp.org", 3600, 36000);
 RulesManagementService ruleService;
 
 const char* ssid     = "net_4016";         // The SSID (name) of the Wi-Fi network you want to connect to
 const char* password = "LCZTAUGQVCLCZTAUGQVC";     // The password of the Wi-Fi network
-const char* mqttServer = "192.168.1.7";
+const char* mqttServer = "192.168.1.5";
 const char* topicName = "sensors/heatingControl/1";
 const char* systemStatusTopic = "sensors/heatingControl/1/status";
 
-std::vector<Rule> rules;
+std::vector<Rule*> rules;
 long lastActiveRuleUpdate = 0;
+char* rulesRaw;
 
 bool isRelayOn = false;
 
@@ -38,10 +39,17 @@ int BLINK_DURATION = 2000;
 unsigned long RULE_WAIT_TIME = 30; // number of seconds to wait before inspecting rules
 
 void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.println("Saving new rules to memory");
+  Serial.print("Saving new rules to memory with length = ");
+  Serial.println(length);
+
   ruleService.saveRules((char*) payload);
 
-  Serial.println("Loading rules from memory");
+  for (std::vector<Rule*>::iterator it = rules.begin(); it != rules.end(); it++) {
+      delete *it;
+  }
+
+  rules.clear();
+
   rules = ruleService.getSavedRules();
 
   lastActiveRuleUpdate = 0;
@@ -82,13 +90,35 @@ void reconnect() {
   }
 }
 
-void sendSystemStatus(float temperature){
-    const size_t capacity = JSON_OBJECT_SIZE(1) + 20;
+void sendSystemStatus(float temperature, int ruleId){
+    const size_t capacity = JSON_OBJECT_SIZE(4) + (5 * 1024);
     char* systemStatusJson = new char[capacity];
     DynamicJsonDocument doc(capacity);
+
+    doc["id"] = ruleId;
     doc["temperature"] = temperature;
+    doc["updatedAt"] = timeClient.getEpochTime();
+
+    if(lastActiveRuleUpdate == 0 && rules.size() > 0){
+        // this is first update since new rules are set
+        // send those rules back to client for verification
+        JsonArray rulesJsonArray = doc.createNestedArray("rules");
+
+        for (std::vector<Rule*>::iterator it = rules.begin(); it != rules.end(); it++) {
+          JsonObject rule = rulesJsonArray.createNestedObject();
+          rule["id"] = (*it)->getId();
+          rule["day"] = (*it)->getDay();
+          rule["hour"] = (*it)->getStartHour();
+          rule["minute"] = (*it)->getStartMinute();
+          rule["temperature"] = (*it)->getMaxTemperature();
+        }
+    }
+
     serializeJson(doc, systemStatusJson, capacity);
     client.publish(systemStatusTopic, systemStatusJson);
+
+    doc.clear();
+    delete[] systemStatusJson;
 }
 
 void inspectRules(){
@@ -97,14 +127,17 @@ void inspectRules(){
   }
 
   Rule activeRule;
+  int activeRuleId = -1; // not mached
   bool isRuleMatched = false;
+
+  Serial.print("Free Heap size = ");
+  Serial.println(system_get_free_heap_size());
+  Serial.println("---------------------------");
 
   Serial.println("Inspetcting rules..");
 
   sensors.requestTemperatures();
   float currentTemperature = sensors.getTempCByIndex(0);
-
-  sendSystemStatus(currentTemperature);
 
   Serial.print("Current temp = ");
   Serial.println(currentTemperature);
@@ -119,12 +152,8 @@ void inspectRules(){
   Serial.println(timeClient.getMinutes());
 
   for(int i = (rules.size() - 1); i >= 0; i--){
-    Serial.println("------------Rule Validation---------------");
-    rules[i].printInfoToSerial();
-    Serial.println("------------Rule Validation---------------");
-
-    if(rules[i].isBefore(timeClient) || rules[i].isDirect()){
-      activeRule = rules[i];
+    if(rules[i]->isBefore(timeClient) || rules[i]->isDirect()){
+      activeRule = *rules[i];
       isRuleMatched = true;
       break;
     }
@@ -135,6 +164,7 @@ void inspectRules(){
       Serial.println("Matched Rule");
       activeRule.printInfoToSerial();
       digitalWrite(RELAY, HIGH);
+      activeRuleId = activeRule.getId();
     }else{
       Serial.println("Relay LOW - INNER ELSE");
       digitalWrite(RELAY, LOW);
@@ -144,6 +174,7 @@ void inspectRules(){
     digitalWrite(RELAY, LOW);
   }
 
+  sendSystemStatus(currentTemperature, activeRuleId);
   lastActiveRuleUpdate = timeClient.getEpochTime();
 }
 
@@ -157,18 +188,10 @@ void setup() {
   setupWifi();
   setupMqtt();
 
-  timeClient.begin();
-  sensors.begin();
-
-  Serial.println("Loading rules from memory");
   rules = ruleService.getSavedRules();
 
-  Serial.print("Rules size = ");
-  Serial.println(rules.size());
-
-  for(int i = (rules.size() - 1); i >= 0; i--){
-    rules[i].printInfoToSerial();
-  }
+  timeClient.begin();
+  sensors.begin();
 }
 
 void loop() {

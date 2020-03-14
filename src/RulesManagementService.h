@@ -4,7 +4,8 @@ class RulesManagementService{
   public:
     RulesManagementService();
     void saveRules(const char* rulesAsText);
-    std::vector<Rule> getSavedRules();
+    std::vector<Rule*> getSavedRules();
+    char* getSavedRulesRaw();
 
   private:
     static const int RULES_STARTING_ADDRESS = 10;

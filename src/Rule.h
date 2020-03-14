@@ -2,6 +2,7 @@
 
 class Rule {
   private:
+    int m_id;
     int m_day;
     int m_startHour;
     int m_startMinute;
@@ -9,7 +10,8 @@ class Rule {
 
   public:
     Rule();
-    Rule(int day, int startHour, int startMinute, double maxTemp);
+    Rule(int id ,int day, int startHour, int startMinute, double maxTemp);
+    int getId();
     int getDay();
     int getStartHour();
     int getStartMinute();

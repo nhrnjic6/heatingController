@@ -25,8 +25,8 @@ void RulesManagementService::saveRules(const char *rulesAsText){
   EEPROM.commit();
 }
 
-std::vector<Rule> RulesManagementService::getSavedRules(){
-  std::vector<Rule> rules;
+std::vector<Rule*> RulesManagementService::getSavedRules(){
+  std::vector<Rule*> rules;
   char* jsonFromMemory = new char[MEMORY_MAX_BYTES];
 
   unsigned int index = 0;
@@ -50,11 +50,36 @@ std::vector<Rule> RulesManagementService::getSavedRules(){
   int rulesSize = doc["rulesSize"];
   JsonArray rulesJson = doc["rules"];
 
+  Serial.print("Deserialized array with size = ");
+  Serial.println(rulesJson.size());
+
+  Serial.print("Creating rule array with size: ");
+  Serial.println(rulesSize);
+
   for(int i = 0; i < rulesSize; i++){
     JsonObject ruleJson = rulesJson[i];
-    Rule rule(ruleJson["day"], ruleJson["startHour"], ruleJson["startMinute"], ruleJson["temperature"]);
+    Rule *rule = new Rule(ruleJson["id"] ,ruleJson["day"], ruleJson["hour"], ruleJson["minute"], ruleJson["temperature"]);
     rules.push_back(rule);
   }
 
+  Serial.println("Finished pushing rules");
+
+  doc.clear();
+  delete[] jsonFromMemory;
   return rules;
+}
+
+char* RulesManagementService::getSavedRulesRaw(){
+  char* jsonFromMemory = new char[MEMORY_MAX_BYTES];
+
+  unsigned int index = 0;
+
+  while(index < MEMORY_MAX_BYTES){
+    char currentChar = EEPROM.read(index + RULES_STARTING_ADDRESS);
+    if(currentChar == '!') break; // end of rules
+
+    jsonFromMemory[index++] = currentChar;
+  }
+
+  return jsonFromMemory;
 }
