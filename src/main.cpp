@@ -23,9 +23,8 @@ const char* mqttServer = "192.168.1.5";
 const char* topicName = "sensors/heatingControl/1";
 const char* systemStatusTopic = "sensors/heatingControl/1/status";
 
-std::vector<Rule*> rules;
+SystemRuleConfig systemConfig;
 long lastActiveRuleUpdate = 0;
-char* rulesRaw;
 
 bool isRelayOn = false;
 
@@ -39,27 +38,19 @@ int BLINK_DURATION = 2000;
 unsigned long RULE_WAIT_TIME = 30; // number of seconds to wait before inspecting rules
 
 void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Saving new rules to memory with length = ");
-  Serial.println(length);
-
   ruleService.saveRules((char*) payload);
 
-  for (std::vector<Rule*>::iterator it = rules.begin(); it != rules.end(); it++) {
-      delete *it;
-  }
+  systemConfig.clear();
+  systemConfig = ruleService.getSystemConfig();
 
-  rules.clear();
-
-  rules = ruleService.getSavedRules();
-
-  lastActiveRuleUpdate = 0;
+  lastActiveRuleUpdate = 0; // TODO: extract this to system config object
 }
 
 void setupWifi(){
-  WiFi.begin(ssid, password);             // Connect to the network
+  WiFi.begin(ssid, password);
 
   int i = 0;
-  while (WiFi.status() != WL_CONNECTED) { // Wait for the Wi-Fi to connect
+  while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.print(++i); Serial.print(' ');
   }
@@ -99,18 +90,20 @@ void sendSystemStatus(float temperature, int ruleId){
     doc["temperature"] = temperature;
     doc["updatedAt"] = timeClient.getEpochTime();
 
-    if(lastActiveRuleUpdate == 0 && rules.size() > 0){
+    if(lastActiveRuleUpdate == 0 && systemConfig.isSet()){
+
+        doc["rulesMode"] = systemConfig.getRulesMode();
         // this is first update since new rules are set
         // send those rules back to client for verification
         JsonArray rulesJsonArray = doc.createNestedArray("rules");
 
-        for (std::vector<Rule*>::iterator it = rules.begin(); it != rules.end(); it++) {
+        for (unsigned int i = 0; i < systemConfig.getSetpoints().size(); i++) {
           JsonObject rule = rulesJsonArray.createNestedObject();
-          rule["id"] = (*it)->getId();
-          rule["day"] = (*it)->getDay();
-          rule["hour"] = (*it)->getStartHour();
-          rule["minute"] = (*it)->getStartMinute();
-          rule["temperature"] = (*it)->getMaxTemperature();
+          rule["id"] = systemConfig.getSetpoints()[i]->getId();
+          rule["day"] = systemConfig.getSetpoints()[i]->getDay();
+          rule["hour"] = systemConfig.getSetpoints()[i]->getStartHour();
+          rule["minute"] = systemConfig.getSetpoints()[i]->getStartMinute();
+          rule["temperature"] = systemConfig.getSetpoints()[i]->getMaxTemperature();
         }
     }
 
@@ -122,7 +115,7 @@ void sendSystemStatus(float temperature, int ruleId){
 }
 
 void inspectRules(){
-  if(timeClient.getEpochTime() < (lastActiveRuleUpdate + RULE_WAIT_TIME)){
+  if(systemConfig.isSet() && timeClient.getEpochTime() < (lastActiveRuleUpdate + RULE_WAIT_TIME)){
     return;
   }
 
@@ -132,7 +125,6 @@ void inspectRules(){
 
   Serial.print("Free Heap size = ");
   Serial.println(system_get_free_heap_size());
-  Serial.println("---------------------------");
 
   Serial.println("Inspetcting rules..");
 
@@ -151,16 +143,16 @@ void inspectRules(){
   Serial.print("Minute = ");
   Serial.println(timeClient.getMinutes());
 
-  for(int i = (rules.size() - 1); i >= 0; i--){
-    if(rules[i]->isBefore(timeClient) || rules[i]->isDirect()){
-      activeRule = *rules[i];
+  for(int i = (systemConfig.getSetpoints().size() - 1); i >= 0; i--){
+    if(systemConfig.getSetpoints()[i]->isBefore(timeClient)){
+      activeRule = *systemConfig.getSetpoints()[i];
       isRuleMatched = true;
       break;
     }
   }
 
   if(isRuleMatched){
-    if(currentTemperature < activeRule.getMaxTemperature() || activeRule.isDirect()){
+    if(currentTemperature < activeRule.getMaxTemperature()){
       Serial.println("Matched Rule");
       activeRule.printInfoToSerial();
       digitalWrite(RELAY, HIGH);
@@ -188,7 +180,8 @@ void setup() {
   setupWifi();
   setupMqtt();
 
-  rules = ruleService.getSavedRules();
+  systemConfig.clear();
+  systemConfig = ruleService.getSystemConfig();
 
   timeClient.begin();
   sensors.begin();

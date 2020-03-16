@@ -1,14 +1,13 @@
-#include "Rule.h"
+#include "SystemRuleConfig.h"
 
 class RulesManagementService{
   public:
     RulesManagementService();
     void saveRules(const char* rulesAsText);
-    std::vector<Rule*> getSavedRules();
-    char* getSavedRulesRaw();
+    SystemRuleConfig getSystemConfig();
 
   private:
     static const int RULES_STARTING_ADDRESS = 10;
     static const int MAX_RULES_SIZE = 50;
-    static const int MEMORY_MAX_BYTES = 3 * 1024;
+    static const int MEMORY_MAX_BYTES = 5 * 1024;
 };
