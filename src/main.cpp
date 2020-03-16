@@ -119,17 +119,32 @@ void inspectRules(){
     return;
   }
 
-  Rule activeRule;
   int activeRuleId = -1; // not mached
+
+  sensors.requestTemperatures();
+  float currentTemperature = sensors.getTempCByIndex(0);
+
+  if(systemConfig.getRulesMode() == 0){
+    digitalWrite(RELAY, LOW);
+    sendSystemStatus(currentTemperature, activeRuleId);
+    lastActiveRuleUpdate = timeClient.getEpochTime();
+    return;
+  }
+
+  if(systemConfig.getRulesMode() == 1){
+    digitalWrite(RELAY, HIGH);
+    sendSystemStatus(currentTemperature, activeRuleId);
+    lastActiveRuleUpdate = timeClient.getEpochTime();
+    return;
+  }
+
+  Rule activeRule;
   bool isRuleMatched = false;
 
   Serial.print("Free Heap size = ");
   Serial.println(system_get_free_heap_size());
 
   Serial.println("Inspetcting rules..");
-
-  sensors.requestTemperatures();
-  float currentTemperature = sensors.getTempCByIndex(0);
 
   Serial.print("Current temp = ");
   Serial.println(currentTemperature);
