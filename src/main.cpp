@@ -19,14 +19,13 @@ RulesManagementService ruleService;
 
 const char* ssid     = "net_4016";         // The SSID (name) of the Wi-Fi network you want to connect to
 const char* password = "LCZTAUGQVCLCZTAUGQVC";     // The password of the Wi-Fi network
-const char* mqttServer = "192.168.1.5";
-const char* topicName = "sensors/heatingControl/1";
-const char* systemStatusTopic = "sensors/heatingControl/1/status";
+const char* mqttServer = "192.168.1.3";
+const char* actionTopic = "sensors/heatingControl/action";
+const char* statusTopic = "sensors/heatingControl/status";
 
 SystemRuleConfig systemConfig;
 long lastActiveRuleUpdate = 0;
-
-bool isRelayOn = false;
+String requestId;
 
 // Pin config
 int LED = 13;
@@ -36,15 +35,6 @@ int TEMP = 14;
 // Blink duration
 int BLINK_DURATION = 2000;
 unsigned long RULE_WAIT_TIME = 30; // number of seconds to wait before inspecting rules
-
-void callback(char* topic, byte* payload, unsigned int length) {
-  ruleService.saveRules((char*) payload);
-
-  systemConfig.clear();
-  systemConfig = ruleService.getSystemConfig();
-
-  lastActiveRuleUpdate = 0; // TODO: extract this to system config object
-}
 
 void setupWifi(){
   WiFi.begin(ssid, password);
@@ -56,12 +46,6 @@ void setupWifi(){
   }
 }
 
-void setupMqtt(){
-  client.setServer(mqttServer, 1883);
-  client.setCallback(callback);
-  client.subscribe(topicName);
-}
-
 void reconnect() {
   // Loop until we're reconnected
   while (!client.connected()) {
@@ -70,10 +54,8 @@ void reconnect() {
     clientId += String(random(0xffff), HEX);
     // Attempt to connect
     if (client.connect(clientId.c_str())) {
-      // Once connected, publish an announcement...
-      client.publish(topicName, "esp8266 connected");
       // ... and resubscribe
-      client.subscribe(topicName);
+      client.subscribe(actionTopic);
     } else {
       // Wait 5 seconds before retrying
       delay(5000);
@@ -86,6 +68,7 @@ void sendSystemStatus(float temperature, int ruleId){
     char* systemStatusJson = new char[capacity];
     DynamicJsonDocument doc(capacity);
 
+    doc["requestId"] = requestId;
     doc["id"] = ruleId;
     doc["temperature"] = temperature;
     doc["updatedAt"] = timeClient.getEpochTime();
@@ -108,7 +91,7 @@ void sendSystemStatus(float temperature, int ruleId){
     }
 
     serializeJson(doc, systemStatusJson, capacity);
-    client.publish(systemStatusTopic, systemStatusJson);
+    client.publish(statusTopic, systemStatusJson);
 
     doc.clear();
     delete[] systemStatusJson;
@@ -183,6 +166,48 @@ void inspectRules(){
 
   sendSystemStatus(currentTemperature, activeRuleId);
   lastActiveRuleUpdate = timeClient.getEpochTime();
+}
+
+void callback(char* topic, byte* payload, unsigned int length) {
+
+  char* payloadCopy = new char[strlen((char*) payload) + 1];
+  strcpy(payloadCopy, (char*)payload);
+
+  DynamicJsonDocument doc(5 * 1024);
+  DeserializationError error = deserializeJson(doc, payloadCopy);
+
+  if(!error){
+    const char* setActionType = "set_setpoints";
+    const char* getActionType = "get_setpoints";
+    const char* actionTypeValue = doc["actionType"];
+    const char* reqId = doc["requestId"];
+
+    if(strcmp(actionTypeValue, setActionType) == 0){
+      requestId = reqId; // extract to system object
+
+      ruleService.saveRules((char*) payload);
+
+      systemConfig.clear();
+      systemConfig = ruleService.getSystemConfig();
+
+      lastActiveRuleUpdate = 0; // extract to system object
+    }
+
+    if(strcmp(actionTypeValue, getActionType) == 0){
+      requestId = reqId;
+      lastActiveRuleUpdate = 0; // extract to system object
+      inspectRules();
+    }
+  }
+
+  doc.clear();
+  delete[] payloadCopy;
+}
+
+void setupMqtt(){
+  client.setServer(mqttServer, 1883);
+  client.setCallback(callback);
+  client.subscribe(actionTopic);
 }
 
 void setup() {
