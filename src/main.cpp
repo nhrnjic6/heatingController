@@ -185,7 +185,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
     if(strcmp(actionTypeValue, setActionType) == 0){
       requestId = reqId; // extract to system object
 
-      Serial.println(String((char*)payload));
       ruleService.saveRules((char*) payload);
 
       systemConfig.clear();
