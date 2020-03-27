@@ -34,7 +34,7 @@ SystemRuleConfig RulesManagementService::getSystemConfig(){
   while(index < MEMORY_MAX_BYTES){
     char currentChar = EEPROM.read(index + RULES_STARTING_ADDRESS);
     if(currentChar == '!') break; // end of rules
-
+    Serial.print(currentChar);
     jsonFromMemory[index++] = currentChar;
   }
 
