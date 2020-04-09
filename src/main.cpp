@@ -6,6 +6,7 @@
 #include <EEPROM.h>
 #include <WiFiUdp.h>
 #include <NTPClient.h>
+#include <TimeLib.h>
 #include <ArduinoJson.h>
 #include "RulesManagementService.h"
 
@@ -23,11 +24,14 @@ const char* mqttServer = "192.168.1.3";
 const char* actionTopic = "sensors/heatingControl/action";
 const char* statusTopic = "sensors/heatingControl/status";
 
+long currentTimeOffset = 3600;
+
 SystemRuleConfig systemConfig;
 long lastActiveRuleUpdate = 0;
 String requestId;
 
 // Pin config
+
 int LED = 13;
 int RELAY = 12;
 int TEMP = 14;
@@ -97,10 +101,50 @@ void sendSystemStatus(float temperature, int ruleId){
     delete[] systemStatusJson;
 }
 
+void adjustTimeShifting(){
+  TimeElements now;
+  breakTime(timeClient.getEpochTime(), now);
+  time_t nowMilis = makeTime(now);
+
+  TimeElements summerTime;
+  summerTime.Year = now.Year;
+  summerTime.Month = 3;
+  summerTime.Day = 29;
+  summerTime.Hour = 2;
+  time_t summerTimeMilis = makeTime(summerTime);
+
+  TimeElements winterTime;
+  winterTime.Year = now.Year;
+  winterTime.Month = 10;
+  winterTime.Day = 25;
+  winterTime.Hour = 3;
+  time_t winterTimeMilis = makeTime(winterTime);
+
+  if(currentTimeOffset != 3600 && (nowMilis < summerTimeMilis)){
+    timeClient.setTimeOffset(3600);
+    currentTimeOffset = 3600;
+    return;
+  }
+
+  if(currentTimeOffset != 7200 && (nowMilis >= summerTimeMilis && nowMilis < winterTimeMilis)){
+    timeClient.setTimeOffset(7200);
+    currentTimeOffset = 7200;
+    return;
+  }
+
+  if(currentTimeOffset != 3600 && (nowMilis >= winterTimeMilis)){
+    timeClient.setTimeOffset(3600);
+    currentTimeOffset = 3600;
+    return;
+  }
+}
+
 void inspectRules(){
   if(systemConfig.isSet() && timeClient.getEpochTime() < (lastActiveRuleUpdate + RULE_WAIT_TIME)){
     return;
   }
+
+  adjustTimeShifting();
 
   int activeRuleId = -1; // not mached
 
@@ -223,8 +267,8 @@ void setup() {
   systemConfig.clear();
   systemConfig = ruleService.getSystemConfig();
 
-  timeClient.begin();
   sensors.begin();
+  timeClient.begin();
 }
 
 void loop() {
