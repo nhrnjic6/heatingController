@@ -11,7 +11,7 @@ void RulesManagementService::saveRules(const char *rulesAsText){
   unsigned int i;
 
   // clear memory
-  for(i = 0; i < MEMORY_MAX_BYTES; i++){
+  for(i = RULES_STARTING_ADDRESS; i < MEMORY_MAX_BYTES; i++){
     EEPROM.write(i, 0);
   }
 

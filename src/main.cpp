@@ -67,6 +67,27 @@ void reconnect() {
   }
 }
 
+std::vector<byte> getTemperature(){
+  std::vector<byte> temperature;
+
+  for(int i = 10 ; i < 106; i++){
+    temperature.push_back(EEPROM.read(i));
+  }
+
+  return temperature;
+}
+
+void saveCurrentTemperature(byte temperature){
+  int minutesToday = (timeClient.getHours() * 60) + timeClient.getMinutes();
+  int offset = minutesToday / 15;
+  Serial.print("Saving at offset = ");
+  Serial.print(offset);
+  Serial.print(" Value = ");
+  Serial.print(temperature);
+
+  EEPROM.write(10 + offset, temperature);
+}
+
 void sendSystemStatus(float temperature, int ruleId){
     const size_t capacity = JSON_OBJECT_SIZE(4) + (5 * 1024);
     char* systemStatusJson = new char[capacity];
@@ -83,6 +104,7 @@ void sendSystemStatus(float temperature, int ruleId){
         // this is first update since new rules are set
         // send those rules back to client for verification
         JsonArray rulesJsonArray = doc.createNestedArray("rules");
+        JsonArray tempArray = doc.createNestedArray("tempList");
 
         for (unsigned int i = 0; i < systemConfig.getSetpoints().size(); i++) {
           JsonObject rule = rulesJsonArray.createNestedObject();
@@ -91,6 +113,12 @@ void sendSystemStatus(float temperature, int ruleId){
           rule["hour"] = systemConfig.getSetpoints()[i]->getStartHour();
           rule["minute"] = systemConfig.getSetpoints()[i]->getStartMinute();
           rule["temperature"] = systemConfig.getSetpoints()[i]->getMaxTemperature();
+        }
+
+        std::vector<byte> temperature = getTemperature();
+
+        for(unsigned int i = 0; i < temperature.size(); i++){
+            tempArray.add(temperature[i]);
         }
     }
 
@@ -150,6 +178,7 @@ void inspectRules(){
 
   sensors.requestTemperatures();
   float currentTemperature = sensors.getTempCByIndex(0);
+  saveCurrentTemperature(currentTemperature);
 
   if(systemConfig.getRulesMode() == 0){
     digitalWrite(RELAY, LOW);
@@ -260,6 +289,10 @@ void setup() {
 
   pinMode(RELAY, OUTPUT);
   digitalWrite(RELAY, LOW);
+
+  for(int i = 10 ; i < 106; i++){
+    EEPROM.write(i, 0);
+  }
 
   setupWifi();
   setupMqtt();
