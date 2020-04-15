@@ -290,10 +290,6 @@ void setup() {
   pinMode(RELAY, OUTPUT);
   digitalWrite(RELAY, LOW);
 
-  for(int i = 10 ; i < 106; i++){
-    EEPROM.write(i, 0);
-  }
-
   setupWifi();
   setupMqtt();
 
