@@ -20,7 +20,9 @@ RulesManagementService ruleService;
 
 const char* ssid     = "net_4016";         // The SSID (name) of the Wi-Fi network you want to connect to
 const char* password = "LCZTAUGQVCLCZTAUGQVC";     // The password of the Wi-Fi network
-const char* mqttServer = "192.168.1.3";
+const char* mqttServer = "167.172.171.209";
+const char* mqttUsername = "nhrnjic";
+const char* mqttPassword = "RBKz2rmmnFh77ACR62pR";
 const char* actionTopic = "sensors/heatingControl/action";
 const char* statusTopic = "sensors/heatingControl/status";
 
@@ -57,7 +59,7 @@ void reconnect() {
     String clientId = "ESP8266Client-";
     clientId += String(random(0xffff), HEX);
     // Attempt to connect
-    if (client.connect(clientId.c_str())) {
+    if (client.connect(clientId.c_str(), mqttUsername, mqttPassword)) {
       // ... and resubscribe
       client.subscribe(actionTopic);
     } else {
